@@ -12,10 +12,6 @@ module CachedResource
 end
 
 # Include model methods in ActiveResource::Base
-class ActiveResource::Base
-  include CachedResource::Model
-end
-
 class ParseResource::Base
   include CachedResource::Model
 end

@@ -14,6 +14,7 @@ module CachedResource
       # Find a resource using the cache or resend the request
       # if :reload is set to true or caching is disabled.
       def find_with_cache(*arguments)
+        puts "I'm hijacking the find method."
         arguments << {} unless arguments.last.is_a?(Hash)
         should_reload = arguments.last.delete(:reload) || !cached_resource.enabled
         arguments.pop if arguments.last.empty?
