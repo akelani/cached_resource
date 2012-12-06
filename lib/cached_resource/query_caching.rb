@@ -2,81 +2,57 @@ module CachedResource
   # The Caching module is included in ActiveResource and
   # handles caching and recaching of responses.
 
-  module Caching
+  module QueryCaching
     extend ActiveSupport::Concern
 
     included do
       class << self
-        alias_method_chain :find, :cache
-        alias_method_chain :all, :cache
       end
-      alias_method_chain :update, :cache
+
+      alias_method_chain :all, :cache
+
     end
 
     module InstanceMethods
-      def update_with_cache(*arguments)
-        id = self.send(:id)
-        Rails.logger.debug("Original Attributes: #{self.attributes}")
-        Rails.logger.debug("Original Resource: #{self.inspect}")
-        Rails.logger.debug("Arguments to Update: #{arguments.first if arguments.first}")
-        Rails.logger.debug("Unsaved Attributes: #{@unsaved_attributes if @unsaved_attributes}")
-        arguments.first ? self.attributes.merge!(arguments.first) : self.attributes.merge!(@unsaved_attributes)
-        @unsaved_attributes = {}
-        Rails.logger.debug("Updated Attributes: #{self.attributes}")
-        Rails.logger.debug("Updated Resource: #{self.inspect}")
-        key = self.class.cache_key(id)
-        Rails.logger.debug("Cache Key: #{key}")
-        self.class.cache_write(key, self)
-        #self.class.cache_collection_synchronize(self, arguments)
-        update_without_cache(*arguments)
+      def all_with_cache(*arguments)
+        Rails.logger.debug("All with cache...")
+        arguments << {} unless arguments.last.is_a?(Hash)
+        should_reload = arguments.last.delete(:reload) || !self.class.cached_resource.enabled
+        arguments.pop if arguments.last.empty?
+        key = self.class.cache_key(self.criteria)
+        Rails.logger.debug("Key: #{key}")
+        should_reload ? all_via_reload(key, *arguments) : all_via_cache(key, *arguments)
+      end
+
+      def all_via_reload(key, *arguments)
+        self.class.cached_resource.logger.debug("Getting all via reload...")
+        object = all_without_cache(*arguments)
+        self.class.cache_collection_synchronize(object, *arguments) if self.class.cached_resource.collection_synchronize
+        self.class.cache_write(key, object)
+        self.class.cache_read(key)
+      end
+
+      def all_via_cache(key, *arguments)
+        self.class.cache_read(key) || all_via_reload(key, *arguments)
       end
     end
 
     module ClassMethods
       # Find a resource using the cache or resend the request
       # if :reload is set to true or caching is disabled.
-      def find_with_cache(*arguments)
-        cached_resource.logger.debug("Find with cache...")
-        arguments << {} unless arguments.last.is_a?(Hash)
-        should_reload = arguments.last.delete(:reload) || !cached_resource.enabled
-        arguments.pop if arguments.last.empty?
-        key = cache_key(arguments)
-        cached_resource.logger.debug("Key: #{key}")
-        should_reload ? find_via_reload(key, *arguments) : find_via_cache(key, *arguments)
-      end
-      
-      def all_with_cache(*arguments)
-        cached_resource.logger.debug("All with cache...")
-        arguments << {} unless arguments.last.is_a?(Hash)
-        should_reload = arguments.last.delete(:reload) || !cached_resource.enabled
-        arguments.pop if arguments.last.empty?
-        key = cache_key("all")
-        cached_resource.logger.debug("Key: #{key}")
-        should_reload ? all_via_reload(key, *arguments) : all_via_cache(key, *arguments)
-      end
 
       #private
 
       # Try to find a cached response for the given key.  If
       # no cache entry exists, send a new request.
-      def find_via_cache(key, *arguments)
-        cache_read(key) || find_via_reload(key, *arguments)
-      end
-      
+
       def all_via_cache(key, *arguments)
         cache_read(key) || all_via_reload(key, *arguments)
       end
-      
+
       # Re/send the request to fetch the resource. Cache the response
       # for the request.
-      def find_via_reload(key, *arguments)
-        cached_resource.logger.debug("Finding via reload...")
-        object = find_without_cache(*arguments)
-        cache_collection_synchronize(object, *arguments) if cached_resource.collection_synchronize
-        cache_write(key, object)
-        cache_read(key)
-      end
-      
+
       def all_via_reload(key, *arguments)
         cached_resource.logger.debug("Getting all via reload...")
         object = all_without_cache(*arguments)
