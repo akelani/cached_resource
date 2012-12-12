@@ -20,15 +20,23 @@ module CachedResource
         Rails.logger.debug("Original Resource: #{self.inspect}")
         Rails.logger.debug("Arguments to Update: #{arguments.first if arguments.first}")
         Rails.logger.debug("Unsaved Attributes: #{@unsaved_attributes if @unsaved_attributes}")
-        arguments.first ? self.attributes.merge!(arguments.first) : self.attributes.merge!(@unsaved_attributes)
+
+        if !!arguments.first
+          update_without_cache(arguments.first)
+          self.attributes.merge!(arguments.first)
+        elsif !!@unsaved_attributes
+          update_without_cache(@unsaved_attributes)
+          self.attributes.merge!(@unsaved_attributes)
+        end
+
         @unsaved_attributes = {}
         Rails.logger.debug("Updated Attributes: #{self.attributes}")
         Rails.logger.debug("Updated Resource: #{self.inspect}")
         key = self.class.cache_key(id)
         Rails.logger.debug("Cache Key: #{key}")
+        self.class.cache_collection_synchronize(self, id) if self.class.cached_resource.collection_synchronize
         self.class.cache_write(key, self)
         #self.class.cache_collection_synchronize(self, arguments)
-        update_without_cache(*arguments)
       end
     end
 
